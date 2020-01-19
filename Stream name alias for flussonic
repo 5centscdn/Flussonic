@@ -1,0 +1,54 @@
+Below is the lua script for stream name alias for flussonic
+
+Update the flussonic.conf for stream name alias
+
+nano /etc/flussonic/flussonic.conf
+
+aliaser /etc/flussonic/aliaser.lua;
+
+
+aliaser.lua
+===========
+
+aliaser /etc/flussonic/aliaser.lua;
+dofile("/etc/flussonic/alias.lua")
+
+
+-- flussonic.log(table.tostring(aliases))
+
+function alias(from, to)
+-- flussonic.log("from: " .. from)
+-- flussonic.log("to: " .. to)
+local ln = string.len(from)
+local prefix = string.sub(req.name, 1, ln)
+-- flussonic.log("prefix: " .. prefix)
+if prefix == from then
+local name = to .. string.sub(req.name, string.len(from)+1)
+-- flussonic.log("name: " .. name)
+return name
+end
+return false
+end
+
+
+flussonic.log("req.name: " .. req.name)
+
+for _, al in pairs(aliases) do
+local name = alias(al[1], al[2])
+if name then
+return name
+end
+end
+
+
+return req.name
+
+
+alias.lua
+=========
+
+aliases = {
+{"stream-name-alias", "streamname"},
+{"stream-name-alias2", "streamname2"},
+}
+
