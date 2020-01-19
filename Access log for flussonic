@@ -1,0 +1,42 @@
+Below is the lua script for access log generation for flussonic
+
+Update the flussonic.conf for enable the log script
+
+nano /etc/flussonic/flussonic.conf
+
+notify /etc/flussonic/log.lua;
+
+log.lua
+=======
+
+function time(utc)
+  if utc == nil then
+    return nil
+  end
+  t = flussonic.datetime(math.floor(utc / 1000))
+  return string.format("%02d:%02d:%02d", t.hour, t.minute, t.second)
+end
+flussonic.log(table.tostring(event))
+duration = 0
+if event.deleted_at and event.created_at then
+  duration = math.floor((event.deleted_at - event.created_at)/1000)
+end
+log_line = log_join({
+  date(event.created_at),
+  time(event.created_at),
+  event.type,
+  event.ip,
+--  event.token,  
+  200,
+  event.media,
+--  event.bytes_sent,
+--  duration,
+--  event.session_id,
+ event.user_agent or "Flash",
+--  event.user_agent,
+  event.referer or "-"
+})
+flussonic.append("/var/log/flussonic/"..event.media..".log", log_line.."\n")
+-- flussonic.log("Hi: "..log_line)
+
+
