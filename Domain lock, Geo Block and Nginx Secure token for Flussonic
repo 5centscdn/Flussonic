@@ -1,0 +1,153 @@
+Below is the Lua script for Domain restriction, Geo Block and Nginx secure token for Flussonic live and VOD streams
+
+Edit Flussonic main conf and updathe lua file path
+
+nano /etc/flussonic/flussonic.conf 
+
+auth_token st;
+cdnproxy;
+stream securetoken/streamname {
+  url rtmp://192.168.1.100:1935/bansalnewstv/bansalnewstv123;
+  auth /root/secure.lua;
+}
+
+
+secure.lua
+==========
+
+
+-- domains = nil
+domains = {"*.live.tv", "5cents.com"}
+
+-- domain_whitelist_ip = nil
+domain_whitelist_ip = {"192.168.0.80", "127.0.0.2"}
+
+
+-- secret_key = nil
+secret_key = "ElXm6ePcBVVd"
+-- 
+
+
+function is_domain_allowed(domain, domains)
+  if domains == nil then
+    return false
+  end
+  if domain == nil then
+    return true -- iOS don't provide referer, so just allow it
+  end
+  for _,d in pairs(domains) do
+    if string.find(d, "*.") == 1 then
+      d1 = string.sub(d, 3)
+      l = string.len(domain) - string.len(d1)
+      if l > 0 and string.sub(domain, l + 1) == d1 then
+        return true
+      end
+    end
+    if string.find(d, ".") == 1 then
+      d1 = string.sub(d, 2)
+      l = string.len(domain) - string.len(d1)
+      if l > 0 and string.sub(domain, l + 1) == d1 then
+        return true
+      end
+    end
+    if d == domain then
+      return true
+    end
+  end
+  return false
+end
+
+
+function is_ip_allowed(ip, list)
+  if list == nil then
+    return false
+  end
+  for _,d in pairs(list) do
+    if d == ip then
+      return true
+    end
+
+    l = string.len(ip)
+    if string.sub(d,1,l) == ip and string.sub(d,l,1) == "." then
+      return true
+    end
+  end
+  return false
+end
+
+
+-- Uncomment this to debug session request
+-- flussonic.log(table.tostring(req))
+
+
+-- Check whitelist IP
+if is_ip_allowed(req.ip, domain_whitelist_ip) then
+  return true, {}
+end
+
+
+-- Check domain restrictions
+if not (domains == nil) then
+  if not is_domain_allowed(req.referer_domain, domains) then
+    return false, {["code"] = 403}
+  end
+end
+
+
+  -- link_expiration_timeout = 3600
+  -- channel_id_key = stream_keys[req.name]
+
+  -- token = crypto.md5(secret_key..req.ip..req.name..link_expiration_time)
+
+
+if not (secret_key == nil) then
+  link_expiration_timeout = 3600
+
+  j,k = string.find(req.token, "%-%-")
+  if j == nil then
+    return false, {} -- Token is invalid, deny
+  end
+
+  -- link_expiration_time = math.floor(os.time()) -- This is how this time is formed in 
+
+
+  link_expiration_time = string.sub(req.token, j + 2, -1)
+  link_creation_time = tonumber(link_expiration_time)
+  token = string.sub(req.token, 1, j-1)
+
+  good_token = crypto.md5(secret_key..req.ip..req.name..link_expiration_time)
+
+  -- flussonic.log("User token is: '"..token.."' our is '"..good_token.."'")
+  if not (token == good_token) then
+    flussonic.log("link invalid, good token: '"..good_token.."'")
+    return false, {["code"] = 403} -- token is stolen
+  end
+
+  if link_creation_time + link_expiration_timeout < os.time() then
+    flussonic.log("session expired")
+    return false, {["code"] = 403} -- link expired    
+  end
+end
+
+return true, {}
+
+
+PHP script for token generation
+
+<?php
+  $key = 'ElXm6ePcBVVd';
+  $path = 'securetoken/streamname/index.m3u8';
+  $expire = time() + 300; // current time + token timeout
+  $md5 = base64_encode(md5($key . $path . $expire , true));
+  $md5 = strtr($md5, '+/', '-_');
+  $md5 = str_replace('=', '', $md5);
+  $token = "st=$md5&e=$expire";
+
+  //use "$hls" to initialize player
+  $hls = "https://playback-URL/securetoken/streamname/index.m3u8?$token";
+
+echo 'Your IP Is : ' . $ip;
+echo "<br/>" . "<br/>" . 'Your Current Time Is : ' . $now;
+echo "<br/>" . "<br/>" . 'Your Secured URL Is : ' . $hls;
+
+Demo secure tokenized URL : https://playback-URL/securetoken/streamname?st=QqUv09xftub9grhnwdlbxw&e=1579458426
